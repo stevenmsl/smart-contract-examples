@@ -1,0 +1,11 @@
+{
+  "name": "solc-remix",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "remixd-share": "remixd -s c:/repobc/solc-remix --remix-ide https://remix.ethereum.org"
+  },
+  "author": "",
+  "license": "ISC"
+}
