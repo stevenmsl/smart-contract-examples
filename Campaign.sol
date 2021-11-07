@@ -1,9 +1,58 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-/* better kickstart 
-
+/* better kickstart
+   - the money won't go to the manager instead
+     it will go to the vendor who provides
+     goods and services
+   - manager needs to submit expense request
+     to send the money to the vendor
+   - approvers, who contributed to the campaign,
+     can approve a expense request 
+   - once more than a half of the approvers
+     have approved the request, the manager can 
+     then finalizes the request and send the
+     money to the recipient
 */
+
+/* design considerations
+  - you can let the managers deploy the campaign
+    contract themself when needed because we don't 
+    want to pay for the gas of deploying a 
+    campaign contract
+    - keep in mind that in kickstart there are tons
+      of projects funded - this is equivalent to
+      have many campaign contracts deployed in our
+      case, and we certainly don't want to pay
+      for any of it for deploying them
+    - the downside for this approach is that 
+      managers can potentially tamper the contract
+      
+  - or introduce an factory contract, which only
+    needs to be deployed once, and provide a method
+    on that factory contract that managers can call 
+    to deploy new compaign contracts
+    - we only pay for the gas to deploy the factory
+      contract
+    - managers pay for the gas to deploy new Campaign
+      contracts
+    - campaign contracts cannot be tampered as they
+      are deployed by the factory contract not managers
+*/
+
+contract CampaignFactory {
+    address[] public deployedCampaigns;
+    
+    function createCampaign(uint minimum) public {
+        Campaign c = new Campaign(minimum, msg.sender);
+        deployedCampaigns.push(address(c));
+    }
+    
+    function getDeployedCampigns() public view returns (address[] memory) {
+        return deployedCampaigns;    
+    } 
+    
+}
 
 contract Campaign {
     /* 
@@ -17,7 +66,13 @@ contract Campaign {
     struct Request {
         string description;
         uint256 value;
-        address recipient;
+        /*
+          - once the request is finalized,
+            we need to transfer the fund 
+            to the recipient so it needs
+            to be payable
+        */
+        address payable recipient;
         bool complete;
         uint256 approvalCount;
         /* nested mapping  */
@@ -73,8 +128,17 @@ contract Campaign {
         approversCount++;
     }
     
+    /*
+      - only manager can create a expense request 
+        to send ether to a vendor (recipient) to
+        purchase goods or services
+        
+      - approvers, who fund the campaign 
+        by contributing ether, can
+        then approve the expense request
+    */
     function createRequest(string calldata description,
-        uint value, address recipient) public restricted {
+        uint value, address payable recipient) public restricted {
         
         /* 
           - since we can't create an Request instance,
@@ -90,7 +154,50 @@ contract Campaign {
             
     }
     
+    function approveRequest(uint index) public {
+        /* 
+          - we want to modify the request and hence
+            the storage modifier
+        */
+        Request storage request = requests[index];
+        require(
+            approvers[msg.sender],
+            "You need to contribute first."
+        );
+        /*
+          - and you haven't approved this request
+            yet
+        */
+        require(
+            !request.approvals[msg.sender],
+            "You have already approved this request."
+        );
+        
+        request.approvals[msg.sender] = true;
+        request.approvalCount++;
+    }
     
+    function finalizeRequest(uint index) public restricted {
+        Request storage request = requests[index];
+        
+        require(
+            request.approvalCount > (approversCount/2),
+            "not enough votes to complete this request"
+        );
+        
+        require(
+            !request.complete,
+            "This request has been finalized"
+        );
+        
+        /* 
+          - you can call the transfer function only if 
+            the address is payable
+        */
+        request.recipient.transfer(request.value);
+        request.complete = true;
+        
+    }
     
     
     
